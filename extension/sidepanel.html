@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NanoVault Hybrid Side Panel</title>
+    <link rel="stylesheet" href="./sidepanel.css" />
+  </head>
+  <body>
+    <main class="sp-shell">
+      <header class="sp-head">
+        <div>
+          <h1>NanoVault Hybrid</h1>
+          <p class="sp-sub">MV3 Local PII Guard &amp; Gemini Nano</p>
+        </div>
+        <span id="spNanoBadge" class="sp-badge">Probing...</span>
+      </header>
+
+      <div class="sp-actions">
+        <button id="grabSelectionBtn" class="sp-btn sp-btn-sec" type="button">Grab Active Tab Selection</button>
+        <select id="spMode" class="sp-select">
+          <option value="prefer_on_device">PREFER_ON_DEVICE</option>
+          <option value="only_on_device">ONLY_ON_DEVICE</option>
+        </select>
+      </div>
+
+      <label class="sp-label" for="spInput">Sensitive Text / Tab Snippet</label>
+      <textarea id="spInput" rows="6" placeholder="Paste or grab selection from the active tab..."></textarea>
+
+      <div class="sp-actions">
+        <button id="spAnalyzeBtn" class="sp-btn sp-btn-pri" type="button">Redact &amp; Run Hybrid AI</button>
+        <button id="spCopyBtn" class="sp-btn sp-btn-sec" type="button">Copy Safe Prompt</button>
+      </div>
+
+      <section class="sp-card">
+        <div class="sp-meta">
+          <span id="spTelemetry">0 entities · 0 B cloud egress</span>
+        </div>
+        <pre id="spOutput" class="sp-out">Ready. Sensitive credentials are masked locally before any AI call.</pre>
+      </section>
+    </main>
+    <script type="module" src="./sidepanel.js"></script>
+  </body>
+</html>

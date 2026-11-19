@@ -1,0 +1,21 @@
+{
+  "name": "nanovault-hybrid",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "NanoVault Hybrid — Privacy-First Hybrid AI Security & PII Redactor built with Firebase AI Logic Hybrid Inference & Chrome Built-in AI (Gemini Nano)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/hybrid-engine.test.ts"
+  },
+  "dependencies": {
+    "firebase": "^13.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}

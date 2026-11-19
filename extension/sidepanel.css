@@ -1,0 +1,119 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #070b14;
+  color: #e2e8f0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.sp-shell {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sp-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.sp-head h1 {
+  margin: 0;
+  font-size: 1rem;
+  color: #38bdf8;
+}
+
+.sp-sub {
+  margin: 2px 0 0;
+  font-size: 0.74rem;
+  color: #94a3b8;
+}
+
+.sp-badge {
+  font-size: 0.7rem;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #111c33;
+  border: 1px solid #334155;
+  font-family: ui-monospace, monospace;
+}
+
+.sp-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.sp-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+textarea,
+.sp-select {
+  width: 100%;
+  background: #0b1324;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 0.8rem;
+}
+
+textarea {
+  font-family: ui-monospace, monospace;
+  resize: vertical;
+}
+
+.sp-btn {
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sp-btn-pri {
+  background: linear-gradient(135deg, #0ea5e9, #10b981);
+  color: #03111c;
+  border-color: transparent;
+  flex: 1;
+}
+
+.sp-btn-sec {
+  background: #111c33;
+  color: #e2e8f0;
+}
+
+.sp-card {
+  background: #0b1324;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.sp-meta {
+  font-size: 0.73rem;
+  color: #34d399;
+  font-family: ui-monospace, monospace;
+  margin-bottom: 6px;
+}
+
+.sp-out {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, monospace;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  max-height: 280px;
+  overflow: auto;
+}

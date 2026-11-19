@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NanoVault Hybrid — Privacy-First Hybrid AI Security &amp; PII Redactor</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-logo" aria-hidden="true">NV</div>
+          <div>
+            <h1>NanoVault <span class="accent">Hybrid</span></h1>
+            <p class="subtitle">
+              Local PII Vault + Firebase AI Logic Hybrid Inference (<code>Gemini Nano</code> &harr; <code>Gemini Cloud</code>)
+            </p>
+          </div>
+        </div>
+        <div class="status-cluster">
+          <span class="badge badge-sdk" id="sdkBadge">firebase@13.4.0 · firebase/ai</span>
+          <span class="badge badge-probe" id="nanoProbeBadge">Probing Chrome Built-in AI...</span>
+          <span class="badge badge-mode" id="activeModeBadge">PREFER_ON_DEVICE</span>
+        </div>
+      </header>
+
+      <section class="toolbar card">
+        <div class="toolbar-group">
+          <span class="label">Incident Presets</span>
+          <div class="preset-buttons">
+            <button type="button" class="btn btn-chip" data-preset="outage">Production Outage Leak</button>
+            <button type="button" class="btn btn-chip" data-preset="fintech">FinTech IBAN &amp; Card</button>
+            <button type="button" class="btn btn-chip" data-preset="ssh">RSA Private Key Leak</button>
+            <button type="button" class="btn btn-chip" data-preset="clean">Clean Safe Prompt</button>
+          </div>
+        </div>
+
+        <div class="toolbar-group">
+          <label class="label" for="modeSelect">Firebase <code>InferenceMode</code></label>
+          <select id="modeSelect" class="select">
+            <option value="prefer_on_device" selected>PREFER_ON_DEVICE (Nano first, safe cloud fallback)</option>
+            <option value="only_on_device">ONLY_ON_DEVICE (Strict 0-cloud local lock)</option>
+            <option value="prefer_in_cloud">PREFER_IN_CLOUD (Redacted cloud, local fallback)</option>
+            <option value="only_in_cloud">ONLY_IN_CLOUD (Redacted cloud only)</option>
+          </select>
+        </div>
+
+        <div class="toolbar-group toggles">
+          <label class="toggle"><input type="checkbox" id="toggleSecrets" checked /> Secrets</label>
+          <label class="toggle"><input type="checkbox" id="togglePii" checked /> PII</label>
+          <label class="toggle"><input type="checkbox" id="toggleNetwork" checked /> Network IPs</label>
+          <label class="toggle toggle-firewall">
+            <input type="checkbox" id="toggleStrictFirewall" />
+            Block Cloud on Critical Secrets
+          </label>
+        </div>
+
+        <div class="toolbar-group">
+          <button type="button" id="toggleConfigBtn" class="btn btn-ghost">Firebase Live Config</button>
+        </div>
+      </section>
+
+      <section id="firebaseConfigDrawer" class="card config-drawer hidden">
+        <div class="drawer-head">
+          <div>
+            <h3>Optional Live Firebase AI Logic Credentials (Session-Only)</h3>
+            <p class="muted">
+              Leave blank to run in <strong>Zero-Key Demo + Chrome Built-in AI Mode</strong>. Enter your Firebase Web App config to execute live hybrid calls via <code>getGenerativeModel(ai, &#123; mode &#125;)</code>. Stored in <code>sessionStorage</code> only.
+            </p>
+          </div>
+          <button type="button" id="clearConfigBtn" class="btn btn-ghost btn-sm">Clear Session Keys</button>
+        </div>
+        <div class="config-grid">
+          <label>
+            <span>Firebase API Key</span>
+            <input id="fbApiKey" type="password" placeholder="AIza..." autocomplete="off" />
+          </label>
+          <label>
+            <span>Project ID</span>
+            <input id="fbProjectId" type="text" placeholder="my-hybrid-ai-project" autocomplete="off" />
+          </label>
+          <label>
+            <span>App ID</span>
+            <input id="fbAppId" type="text" placeholder="1:123456:web:abcdef" autocomplete="off" />
+          </label>
+          <label>
+            <span>Cloud Fallback Model</span>
+            <input id="fbCloudModel" type="text" value="gemini-2.5-flash" autocomplete="off" />
+          </label>
+        </div>
+      </section>
+
+      <main class="workspace">
+        <section class="card panel">
+          <div class="panel-head">
+            <div>
+              <h2>1. Raw Input &amp; Zero-Trust Local PII Guard</h2>
+              <p class="muted">Scanned instantaneously in browser memory before any AI inference.</p>
+            </div>
+            <div class="risk-meter" id="riskMeter">
+              <span class="risk-label">RISK:</span>
+              <strong id="riskLevelText">SAFE (0/100)</strong>
+            </div>
+          </div>
+
+          <label class="field-label" for="taskSelect">Security Task Instruction</label>
+          <select id="taskSelect" class="select full">
+            <option value="Analyze the sanitized prompt below, summarize key security risks or action items concisely, and preserve any {{NV_*}} vault placeholders verbatim.">
+              Incident Security Triage &amp; Remediation
+            </option>
+            <option value="Draft a polite, actionable engineering support response using the {{NV_*}} placeholders verbatim without asking for raw credentials.">
+              Draft Safe Support Response
+            </option>
+            <option value="List compliance violations and secret-rotation steps referencing each {{NV_*}} token verbatim.">
+              Compliance &amp; Secret Rotation Checklist
+            </option>
+          </select>
+
+          <label class="field-label" for="promptInput">Raw Prompt / Log / Ticket</label>
+          <textarea id="promptInput" rows="10" spellcheck="false" placeholder="Paste logs, support tickets, API keys, JWTs, IBANs, or private keys..."></textarea>
+
+          <div class="action-row">
+            <button type="button" id="runBtn" class="btn btn-primary">Run Hybrid Inference</button>
+            <button type="button" id="copySafeBtn" class="btn btn-secondary">Copy Sanitized Prompt</button>
+            <span class="muted small" id="scanStats">0 entities · 0.00 ms local scan</span>
+          </div>
+
+          <div class="vault-section">
+            <div class="vault-head">
+              <h3>Ephemeral Local Vault Tokens</h3>
+              <span class="muted small">Never transmitted off-device</span>
+            </div>
+            <div id="entityList" class="entity-list">
+              <p class="muted small">No sensitive tokens detected.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="card panel">
+          <div class="panel-head">
+            <div>
+              <h2>2. Hybrid Router &amp; Output Restoration</h2>
+              <p class="muted">Inspect exact routing telemetry, sanitized wire payload, and local re-hydration.</p>
+            </div>
+            <span class="badge" id="resultStatusBadge">READY</span>
+          </div>
+
+          <div class="telemetry-grid">
+            <div class="metric">
+              <span class="metric-label">Inference Source</span>
+              <strong class="metric-value" id="metricSource">&mdash;</strong>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Latency</span>
+              <strong class="metric-value" id="metricLatency">&mdash;</strong>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Cloud Bytes Sent</span>
+              <strong class="metric-value" id="metricBytes">0 B</strong>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Policy Decision</span>
+              <strong class="metric-value small-val" id="metricDecision">AWAITING RUN</strong>
+            </div>
+          </div>
+
+          <div class="tabs" role="tablist">
+            <button type="button" class="tab active" data-tab="restored">Local Restored Output</button>
+            <button type="button" class="tab" data-tab="wire">Wire Payload (What Leaves Device)</button>
+            <button type="button" class="tab" data-tab="raw">Raw Model Output ({{NV_*}})</button>
+            <button type="button" class="tab" data-tab="audit">Audit Log (<span id="auditCount">0</span>)</button>
+          </div>
+
+          <div class="tab-panels">
+            <pre id="panelRestored" class="output-box">Click "Run Hybrid Inference" to execute the local PII Guard + Firebase Hybrid AI pipeline.</pre>
+            <pre id="panelWire" class="output-box hidden"></pre>
+            <pre id="panelRaw" class="output-box hidden"></pre>
+            <div id="panelAudit" class="audit-wrap hidden">
+              <table class="audit-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Mode</th>
+                    <th>Source</th>
+                    <th>Latency</th>
+                    <th>Redacted</th>
+                    <th>Cloud Bytes</th>
+                    <th>Decision</th>
+                  </tr>
+                </thead>
+                <tbody id="auditBody">
+                  <tr><td colspan="7" class="muted">No executions yet.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div>
+          <strong>Chrome Extension MV3 Companion:</strong> Load <code>extension/</code> unpacked in <code>chrome://extensions</code> for Side Panel tab redaction &amp; local Gemini Nano checks.
+        </div>
+        <div class="muted">Built for Google #BuildHybridAI 2026 · Zero-capital, privacy-first architecture</div>
+      </footer>
+    </div>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
