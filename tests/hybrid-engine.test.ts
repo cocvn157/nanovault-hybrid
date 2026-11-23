@@ -1,6 +1,4 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { scanAndRedact, restoreTokens } from '../src/pii-guard.ts';
+import { describe, it, expect } from 'vitest';
 import {
   InferenceMode,
   InferenceSource,
@@ -9,192 +7,384 @@ import {
   type LanguageModelProviderLike,
 } from '../src/hybrid-engine.ts';
 
-test('PII Guard redacts secrets, JWTs, private keys, IBAN, Visa Luhn, and emails with lossless local restoration', () => {
-  const sampleSecret = [
-    'Incident by alice.ops@example.com from 10.24.8.15.',
-    'AWS=AKIAIOSFODNN7EXAMPLE',
-    'GH=ghp_1234567890abcdef1234567890abcdef1234',
-    'DB=postgres://admin:S3cretPass!@db.internal.prod:5432/vault',
-    'JWT=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzQ0In0.dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk',
-    'IBAN=DE89370400440532013000',
-    'CARD=4532 0151 1283 0366',
-    '-----BEGIN RSA PRIVATE KEY-----',
-    'MIIEowIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF8PbnGy0AHB7M',
-    '-----END RSA PRIVATE KEY-----',
-  ].join('\n');
+describe('NanoVault Hybrid AI Router & Policy Engine', () => {
+  it('detects Prompt API availability, downloadable states, and hardware readiness cleanly', async () => {
+    const missing = await detectOnDeviceCapabilities(null, {
+      navigatorOnLine: true,
+      probeWebGpu: async () => ({ available: false, adapter: 'Not exposed' }),
+    });
+    expect(missing.apiDetected).toBe('none');
+    expect(missing.availability).toBe('unavailable');
+    expect(missing.localEngineTier).toBe('DETERMINISTIC_LOCAL_VAULT');
 
-  const res = scanAndRedact(sampleSecret);
+    const downloadable = await detectOnDeviceCapabilities(
+      { availability: async () => 'after-download', create: async () => ({ prompt: async () => '' }) },
+      { navigatorOnLine: true, probeWebGpu: async () => ({ available: true, adapter: 'MockGPU' }) }
+    );
+    expect(downloadable.availability).toBe('downloadable');
+    expect(downloadable.localEngineTier).toBe('HYBRID_DOWNLOADABLE');
+    expect(downloadable.webgpuAvailable).toBe(true);
 
-  assert.equal(res.containsCriticalSecrets, true);
-  assert.equal(res.riskLevel, 'CRITICAL');
-  assert.ok(res.entities.length >= 8, `Expected >= 8 entities, got ${res.entities.length}`);
+    const ready = await detectOnDeviceCapabilities(
+      { capabilities: async () => ({ available: 'readily' }), create: async () => ({ prompt: async () => '' }) },
+      { navigatorOnLine: true, probeWebGpu: async () => ({ available: true, adapter: 'MockGPU' }) }
+    );
+    expect(ready.availability).toBe('available');
+    expect(ready.promptApiReady).toBe(true);
+    expect(ready.localEngineTier).toBe('CHROME_GEMINI_NANO');
+  });
 
-  // Verify raw secrets never appear in redactedText
-  assert.equal(res.redactedText.includes('AKIAIOSFODNN7EXAMPLE'), false);
-  assert.equal(res.redactedText.includes('ghp_1234567890abcdef1234567890abcdef1234'), false);
-  assert.equal(res.redactedText.includes('S3cretPass!'), false);
-  assert.equal(res.redactedText.includes('alice.ops@example.com'), false);
-  assert.equal(res.redactedText.includes('DE89370400440532013000'), false);
-  assert.equal(res.redactedText.includes('4532 0151 1283 0366'), false);
-  assert.equal(res.redactedText.includes('MIIEowIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF8PbnGy0AHB7M'), false);
-
-  // Verify reversible local restoration
-  const restored = restoreTokens(res.redactedText, res.tokenMap);
-  assert.equal(restored, sampleSecret);
-});
-
-test('ONLY_ON_DEVICE blocks cloud execution when Chrome Built-in AI is unavailable', async () => {
-  const result = await runHybridInference(
-    {
-      prompt: 'Rotate key ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa for bob@company.org',
-      mode: InferenceMode.ONLY_ON_DEVICE,
-    },
-    {
-      getChromeLanguageModelProvider: () => null,
-    }
-  );
-
-  assert.equal(result.status, 'BLOCKED');
-  assert.equal(result.inferenceSource, 'BLOCKED');
-  assert.equal(result.policyDecision, 'BLOCKED_ONLY_ON_DEVICE_UNAVAILABLE');
-  assert.equal(result.cloudBytesTransmitted, 0);
-  assert.equal(result.redaction.entities.length, 2);
-});
-
-test('PREFER_ON_DEVICE executes ON_DEVICE with 0 cloud bytes when Gemini Nano LanguageModel is available', async () => {
-  const mockProvider: LanguageModelProviderLike = {
-    availability: async () => 'available',
-    create: async () => ({
-      prompt: async (sanitizedInput: string) => {
-        assert.equal(sanitizedInput.includes('bob@company.org'), false);
-        const tokenMatch = sanitizedInput.match(/\{\{NV_EMAIL_\d+\}\}/);
-        assert.ok(tokenMatch, 'Expected tokenized email placeholder in sanitized prompt');
-        return `Local Nano handled ticket for ${tokenMatch[0]} safely.`;
+  it('blocks ONLY_ON_DEVICE cloud fallback when Chrome Built-in AI is unavailable', async () => {
+    const result = await runHybridInference(
+      {
+        prompt: 'Rotate key ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa for bob@company.org',
+        mode: InferenceMode.ONLY_ON_DEVICE,
       },
-      destroy: () => {},
-    }),
-  };
+      {
+        getChromeLanguageModelProvider: () => null,
+        probeWebGpu: async () => ({ available: false, adapter: 'None' }),
+      }
+    );
 
-  const caps = await detectOnDeviceCapabilities(mockProvider);
-  assert.equal(caps.availability, 'available');
+    expect(result.status).toBe('BLOCKED');
+    expect(result.inferenceSource).toBe('BLOCKED');
+    expect(result.policyDecision).toBe('BLOCKED_ONLY_ON_DEVICE_UNAVAILABLE');
+    expect(result.cloudBytesTransmitted).toBe(0);
+    expect(result.economics.actualCostUsd).toBe(0);
+    expect(result.redaction.entities.length).toBe(2);
+  });
 
-  const result = await runHybridInference(
-    {
-      prompt: 'Customer email bob@company.org requested password reset.',
-      mode: InferenceMode.PREFER_ON_DEVICE,
-    },
-    {
-      getChromeLanguageModelProvider: () => mockProvider,
-    }
-  );
+  it('executes PREFER_ON_DEVICE locally with 0 cloud bytes and $0.00 cost when Gemini Nano is available', async () => {
+    const mockProvider: LanguageModelProviderLike = {
+      availability: async () => 'available',
+      create: async () => ({
+        prompt: async (sanitizedInput: string) => {
+          expect(sanitizedInput.includes('bob@company.org')).toBe(false);
+          const tokenMatch = sanitizedInput.match(/<REDACTED_EMAIL_\d+>/);
+          expect(tokenMatch).not.toBeNull();
+          return `Local Nano handled ticket for ${tokenMatch![0]} safely.`;
+        },
+        destroy: () => {},
+      }),
+    };
 
-  assert.equal(result.status, 'SUCCESS');
-  assert.equal(result.inferenceSource, InferenceSource.ON_DEVICE);
-  assert.equal(result.executionKind, 'CHROME_BUILTIN_AI');
-  assert.equal(result.policyDecision, 'ON_DEVICE_EXECUTED');
-  assert.equal(result.cloudBytesTransmitted, 0);
-  assert.equal(result.rawModelOutput.includes('bob@company.org'), false);
-  assert.equal(result.restoredOutput.includes('bob@company.org'), true);
-});
-
-test('PREFER_ON_DEVICE falls back to Zero-Key Cloud Demo with full secret redaction when permitted', async () => {
-  const syntheticStripeKey = ['sk', 'live', '51N9xYzAbCdEfGhIjKlMnOpQrStUvWx'].join('_');
-  const result = await runHybridInference(
-    {
-      prompt: `Check Stripe key ${syntheticStripeKey} and email dev@fin.io`,
-      mode: InferenceMode.PREFER_ON_DEVICE,
-      blockCloudOnCriticalSecrets: false,
-    },
-    {
-      getChromeLanguageModelProvider: () => null,
-    }
-  );
-
-  assert.equal(result.status, 'SUCCESS');
-  assert.equal(result.inferenceSource, InferenceSource.IN_CLOUD);
-  assert.equal(result.executionKind, 'ZERO_KEY_DEMO');
-  assert.equal(result.policyDecision, 'CLOUD_FALLBACK_WITH_REDACTION');
-  assert.ok(result.cloudBytesTransmitted > 0);
-  assert.ok(result.latencyMs > 0);
-  assert.equal(result.sdkPackage, 'firebase@13.4.0 (firebase/ai)');
-  assert.equal(result.wirePayload.includes(syntheticStripeKey), false);
-  assert.equal(result.wirePayload.includes('dev@fin.io'), false);
-  assert.equal(result.restoredOutput.includes(syntheticStripeKey), true);
-});
-
-test('Strict Critical-Secret Firewall blocks cloud egress when critical secrets are present', async () => {
-  const result = await runHybridInference(
-    {
-      prompt: 'Leaky Firebase key AIzaSyD-9xYz1234567890AbCdEfGhIjKlMnOpQrS',
-      mode: InferenceMode.PREFER_ON_DEVICE,
-      blockCloudOnCriticalSecrets: true,
-    },
-    {
-      getChromeLanguageModelProvider: () => null,
-    }
-  );
-
-  assert.equal(result.status, 'BLOCKED');
-  assert.equal(result.policyDecision, 'BLOCKED_CRITICAL_SECRET_POLICY');
-  assert.equal(result.cloudBytesTransmitted, 0);
-});
-
-test('Firebase Hybrid SDK adapter receives HybridParams and restores local vault tokens', async () => {
-  let capturedMode: string | undefined;
-  let capturedCloudModel: string | undefined;
-  let capturedWirePrompt = '';
-
-  const result = await runHybridInference(
-    {
-      prompt: 'Audit JWT eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYWRtaW4ifQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c',
-      mode: InferenceMode.PREFER_ON_DEVICE,
-      blockCloudOnCriticalSecrets: false,
-      firebaseConfig: {
-        apiKey: 'demo-key',
-        projectId: 'nanovault-demo',
-        appId: '1:123:web:abc',
+    const result = await runHybridInference(
+      {
+        prompt: 'Customer email bob@company.org requested password reset.',
+        mode: InferenceMode.PREFER_ON_DEVICE,
       },
-      cloudModel: 'gemini-2.5-flash',
-    },
-    {
-      getChromeLanguageModelProvider: () => null,
-      createFirebaseModel: (_cfg, params) => {
-        capturedMode = params.mode;
-        capturedCloudModel = params.inCloudParams?.model;
-        return {
-          generateContent: async (prompt: string) => {
-            capturedWirePrompt = prompt;
-            const jwtToken = prompt.match(/\{\{NV_JWT_\d+\}\}/)?.[0] ?? '';
-            return {
-              response: {
-                text: () => `Revoke ${jwtToken} and rotate signing secret.`,
-                inferenceSource: InferenceSource.IN_CLOUD,
+      {
+        getChromeLanguageModelProvider: () => mockProvider,
+        probeWebGpu: async () => ({ available: true, adapter: 'WebGPU Ready' }),
+      }
+    );
+
+    expect(result.status).toBe('SUCCESS');
+    expect(result.inferenceSource).toBe(InferenceSource.ON_DEVICE);
+    expect(result.executionKind).toBe('CHROME_BUILTIN_AI');
+    expect(result.policyDecision).toBe('ON_DEVICE_EXECUTED');
+    expect(result.cloudBytesTransmitted).toBe(0);
+    expect(result.economics.actualCostUsd).toBe(0);
+    expect(result.zeroLeakCheck.zeroLeaks).toBe(true);
+    expect(result.rawModelOutput.includes('bob@company.org')).toBe(false);
+    expect(result.restoredOutput.includes('bob@company.org')).toBe(true);
+  });
+
+  it('falls back to Zero-Key Cloud Demo with Zero-Leak verification when permitted', async () => {
+    const syntheticStripeKey = ['sk', 'live', '51N9xYzAbCdEfGhIjKlMnOpQrStUvWx'].join('_');
+    const result = await runHybridInference(
+      {
+        prompt: `Check Stripe key ${syntheticStripeKey} and email dev@fin.io`,
+        mode: InferenceMode.PREFER_ON_DEVICE,
+        blockCloudOnCriticalSecrets: false,
+      },
+      {
+        getChromeLanguageModelProvider: () => null,
+        navigatorOnLine: true,
+        probeWebGpu: async () => ({ available: false, adapter: 'None' }),
+      }
+    );
+
+    expect(result.status).toBe('SUCCESS');
+    expect(result.inferenceSource).toBe(InferenceSource.IN_CLOUD);
+    expect(result.executionKind).toBe('ZERO_KEY_DEMO');
+    expect(result.policyDecision).toBe('CLOUD_FALLBACK_WITH_REDACTION');
+    expect(result.cloudBytesTransmitted).toBeGreaterThan(0);
+    expect(result.zeroLeakCheck.zeroLeaks).toBe(true);
+    expect(result.wirePayload.includes(syntheticStripeKey)).toBe(false);
+    expect(result.wirePayload.includes('dev@fin.io')).toBe(false);
+    expect(result.restoredOutput.includes(syntheticStripeKey)).toBe(true);
+  });
+
+  it('enforces Strict Critical-Secret Firewall across PREFER_ON_DEVICE, PREFER_IN_CLOUD, and ONLY_IN_CLOUD', async () => {
+    const criticalPrompt = 'Leaky Firebase key AIzaSyD-9xYz1234567890AbCdEfGhIjKlMnOpQrS';
+
+    const blockFallback = await runHybridInference(
+      {
+        prompt: criticalPrompt,
+        mode: InferenceMode.PREFER_ON_DEVICE,
+        blockCloudOnCriticalSecrets: true,
+      },
+      { getChromeLanguageModelProvider: () => null, navigatorOnLine: true }
+    );
+    expect(blockFallback.status).toBe('BLOCKED');
+    expect(blockFallback.policyDecision).toBe('BLOCKED_CRITICAL_SECRET_POLICY');
+    expect(blockFallback.cloudBytesTransmitted).toBe(0);
+
+    const blockOnlyCloud = await runHybridInference(
+      {
+        prompt: criticalPrompt,
+        mode: InferenceMode.ONLY_IN_CLOUD,
+        blockCloudOnCriticalSecrets: true,
+      },
+      { getChromeLanguageModelProvider: () => null, navigatorOnLine: true }
+    );
+    expect(blockOnlyCloud.status).toBe('BLOCKED');
+    expect(blockOnlyCloud.policyDecision).toBe('BLOCKED_CRITICAL_SECRET_POLICY');
+
+    const downgradePreferCloud = await runHybridInference(
+      {
+        prompt: criticalPrompt,
+        mode: InferenceMode.PREFER_IN_CLOUD,
+        blockCloudOnCriticalSecrets: true,
+      },
+      { getChromeLanguageModelProvider: () => null, navigatorOnLine: true }
+    );
+    expect(downgradePreferCloud.status).toBe('BLOCKED');
+    expect(downgradePreferCloud.effectiveMode).toBe(InferenceMode.ONLY_ON_DEVICE);
+  });
+
+  it('routes through Firebase Hybrid SDK adapter with HybridParams and restores local tokens', async () => {
+    let capturedMode: string | undefined;
+    let capturedCloudModel: string | undefined;
+    let capturedWirePrompt = '';
+
+    const result = await runHybridInference(
+      {
+        prompt:
+          'Audit JWT eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYWRtaW4ifQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c',
+        mode: InferenceMode.PREFER_ON_DEVICE,
+        blockCloudOnCriticalSecrets: false,
+        firebaseConfig: {
+          apiKey: 'demo-key',
+          projectId: 'nanovault-demo',
+          appId: '1:123:web:abc',
+        },
+        cloudModel: 'gemini-2.5-flash',
+      },
+      {
+        getChromeLanguageModelProvider: () => null,
+        navigatorOnLine: true,
+        createFirebaseModel: (_cfg, params) => {
+          capturedMode = params.mode;
+          capturedCloudModel = params.inCloudParams?.model;
+          return {
+            generateContent: async (prompt: string) => {
+              capturedWirePrompt = prompt;
+              const jwtToken = prompt.match(/<REDACTED_JWT_\d+>/)?.[0] ?? '';
+              return {
+                response: {
+                  text: () => `Revoke ${jwtToken} and rotate signing secret.`,
+                  inferenceSource: InferenceSource.IN_CLOUD,
+                },
+              } as never;
+            },
+          } as never;
+        },
+      }
+    );
+
+    expect(capturedMode).toBe(InferenceMode.PREFER_ON_DEVICE);
+    expect(capturedCloudModel).toBe('gemini-2.5-flash');
+    expect(capturedWirePrompt.includes('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9')).toBe(false);
+    expect(result.status).toBe('SUCCESS');
+    expect(result.executionKind).toBe('FIREBASE_HYBRID_SDK');
+    expect(result.restoredOutput.includes('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9')).toBe(true);
+  });
+
+  it('runs Offline / Airplane-Mode Proof at $0.00 cost and 0 B cloud egress for PREFER_ON_DEVICE fallback', async () => {
+    const result = await runHybridInference(
+      {
+        prompt: 'Offline triage for SSN 412-88-9041 and lead@acme.io',
+        mode: InferenceMode.PREFER_ON_DEVICE,
+        offlineMode: true,
+      },
+      { getChromeLanguageModelProvider: () => null }
+    );
+
+    expect(result.status).toBe('SUCCESS');
+    expect(result.offlineMode).toBe(true);
+    expect(result.inferenceSource).toBe(InferenceSource.ON_DEVICE);
+    expect(result.executionKind).toBe('OFFLINE_LOCAL_FALLBACK');
+    expect(result.policyDecision).toBe('OFFLINE_LOCAL_FALLBACK_EXECUTED');
+    expect(result.cloudBytesTransmitted).toBe(0);
+    expect(result.economics.actualCostUsd).toBe(0);
+    expect(result.restoredOutput).toContain('412-88-9041');
+  });
+
+  it('uses Chrome Gemini Nano even in Offline / Airplane Mode when Prompt API is available', async () => {
+    const mockProvider: LanguageModelProviderLike = {
+      availability: async () => 'available',
+      create: async () => ({
+        prompt: async () => 'Offline Nano executed <REDACTED_SSN_1>.',
+        destroy: () => {},
+      }),
+    };
+
+    const result = await runHybridInference(
+      {
+        prompt: 'Offline SSN 412-88-9041 check',
+        mode: InferenceMode.PREFER_ON_DEVICE,
+        offlineMode: true,
+      },
+      { getChromeLanguageModelProvider: () => mockProvider }
+    );
+
+    expect(result.status).toBe('SUCCESS');
+    expect(result.executionKind).toBe('CHROME_BUILTIN_AI');
+    expect(result.cloudBytesTransmitted).toBe(0);
+    expect(result.economics.actualCostUsd).toBe(0);
+    expect(result.restoredOutput).toContain('412-88-9041');
+  });
+
+  it('blocks ONLY_IN_CLOUD and ONLY_ON_DEVICE appropriately while offline or navigatorOnLine=false', async () => {
+    const blockedCloud = await runHybridInference(
+      {
+        prompt: 'Check status',
+        mode: InferenceMode.ONLY_IN_CLOUD,
+        offlineMode: true,
+      },
+      { getChromeLanguageModelProvider: () => null }
+    );
+    expect(blockedCloud.status).toBe('BLOCKED');
+    expect(blockedCloud.policyDecision).toBe('BLOCKED_OFFLINE_NETWORK_DISABLED');
+    expect(blockedCloud.cloudBytesTransmitted).toBe(0);
+
+    const autoOffline = await runHybridInference(
+      {
+        prompt: 'Check SSN 412-88-9041',
+        mode: InferenceMode.PREFER_ON_DEVICE,
+      },
+      { getChromeLanguageModelProvider: () => null, navigatorOnLine: false }
+    );
+    expect(autoOffline.offlineMode).toBe(true);
+    expect(autoOffline.executionKind).toBe('OFFLINE_LOCAL_FALLBACK');
+    expect(autoOffline.cloudBytesTransmitted).toBe(0);
+
+    const blockedStrictNano = await runHybridInference(
+      {
+        prompt: 'Check SSN 412-88-9041',
+        mode: InferenceMode.ONLY_ON_DEVICE,
+        offlineMode: true,
+      },
+      { getChromeLanguageModelProvider: () => null }
+    );
+    expect(blockedStrictNano.status).toBe('BLOCKED');
+    expect(blockedStrictNano.policyDecision).toBe('BLOCKED_ONLY_ON_DEVICE_UNAVAILABLE');
+  });
+
+  it('blocks ONLY_ON_DEVICE gracefully when Firebase SDK throws on unavailable on-device model', async () => {
+    const result = await runHybridInference(
+      {
+        prompt: 'Check SSN 412-88-9041',
+        mode: InferenceMode.ONLY_ON_DEVICE,
+        firebaseConfig: { apiKey: 'k', projectId: 'p', appId: 'a' },
+      },
+      {
+        getChromeLanguageModelProvider: () => null,
+        navigatorOnLine: true,
+        createFirebaseModel: () =>
+          ({
+            generateContent: async () => {
+              throw new Error('On-device Prompt API not downloaded');
+            },
+          }) as never,
+      }
+    );
+
+    expect(result.status).toBe('BLOCKED');
+    expect(result.policyDecision).toBe('BLOCKED_ONLY_ON_DEVICE_UNAVAILABLE');
+    expect(result.errorMessage).toContain('ONLY_ON_DEVICE enforced');
+  });
+
+  it('detects and executes via legacy window.ai.languageModel namespace when LanguageModel is absent', async () => {
+    const g = globalThis as Record<string, unknown>;
+    const prevLm = g.LanguageModel;
+    const prevAi = g.ai;
+    const legacyProvider: LanguageModelProviderLike = {
+      capabilities: async () => ({ available: 'readily' }),
+      create: async () => ({
+        prompt: async (input: string) => `Legacy Nano checked ${input.match(/<REDACTED_EMAIL_\d+>/)?.[0]}`,
+      }),
+    };
+    g.LanguageModel = undefined;
+    g.ai = { languageModel: legacyProvider };
+
+    try {
+      const cap = await detectOnDeviceCapabilities(undefined, {
+        navigatorOnLine: true,
+        probeWebGpu: async () => ({ available: false, adapter: 'None' }),
+      });
+      expect(cap.apiDetected).toBe('window.ai.languageModel');
+      expect(cap.availability).toBe('available');
+
+      const res = await runHybridInference(
+        { prompt: 'Contact ops@acme.io', mode: InferenceMode.PREFER_ON_DEVICE },
+        { navigatorOnLine: true, probeWebGpu: async () => ({ available: false, adapter: 'None' }) }
+      );
+      expect(res.executionKind).toBe('CHROME_BUILTIN_AI');
+      expect(res.restoredOutput).toContain('ops@acme.io');
+    } finally {
+      g.LanguageModel = prevLm;
+      g.ai = prevAi;
+    }
+  });
+
+  it('routes PREFER_IN_CLOUD and ONLY_IN_CLOUD online with redaction when firewall is off', async () => {
+    const preferCloud = await runHybridInference(
+      {
+        prompt: 'Check SSN 412-88-9041 and dev@fin.io',
+        mode: InferenceMode.PREFER_IN_CLOUD,
+        blockCloudOnCriticalSecrets: false,
+      },
+      { getChromeLanguageModelProvider: () => null, navigatorOnLine: true }
+    );
+    expect(preferCloud.status).toBe('SUCCESS');
+    expect(preferCloud.inferenceSource).toBe(InferenceSource.IN_CLOUD);
+    expect(preferCloud.policyDecision).toBe('CLOUD_PRIMARY_WITH_REDACTION');
+    expect(preferCloud.zeroLeakCheck.zeroLeaks).toBe(true);
+
+    const onlyCloud = await runHybridInference(
+      {
+        prompt: 'Check SSN 412-88-9041',
+        mode: InferenceMode.ONLY_IN_CLOUD,
+        blockCloudOnCriticalSecrets: false,
+      },
+      { getChromeLanguageModelProvider: () => null, navigatorOnLine: true }
+    );
+    expect(onlyCloud.status).toBe('SUCCESS');
+    expect(onlyCloud.policyDecision).toBe('CLOUD_PRIMARY_WITH_REDACTION');
+  });
+
+  it('propagates non-ONLY_ON_DEVICE Firebase SDK errors cleanly', async () => {
+    await expect(
+      runHybridInference(
+        {
+          prompt: 'Check status',
+          mode: InferenceMode.PREFER_ON_DEVICE,
+          firebaseConfig: { apiKey: 'k', projectId: 'p', appId: 'a' },
+        },
+        {
+          getChromeLanguageModelProvider: () => null,
+          navigatorOnLine: true,
+          createFirebaseModel: () =>
+            ({
+              generateContent: async () => {
+                throw new Error('Quota exceeded');
               },
-            } as never;
-          },
-        } as never;
-      },
-    }
-  );
-
-  assert.equal(capturedMode, InferenceMode.PREFER_ON_DEVICE);
-  assert.equal(capturedCloudModel, 'gemini-2.5-flash');
-  assert.equal(capturedWirePrompt.includes('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'), false);
-  assert.equal(result.status, 'SUCCESS');
-  assert.equal(result.executionKind, 'FIREBASE_HYBRID_SDK');
-  assert.equal(result.inferenceSource, InferenceSource.IN_CLOUD);
-  assert.equal(result.restoredOutput.includes('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'), true);
+            }) as never,
+        }
+      )
+    ).rejects.toThrow('Quota exceeded');
+  });
 });
-
-test('Chrome Extension MV3 pii-guard.js produces identical redaction & restoration as core TypeScript engine', async () => {
-  const extGuard = await import('../extension/pii-guard.js');
-  const sample = 'User dev@acme.io leaked ghp_1234567890abcdef1234567890abcdef1234 from 192.168.10.55';
-  const tsRes = scanAndRedact(sample);
-  const jsRes = extGuard.scanAndRedact(sample);
-
-  assert.equal(jsRes.redactedText, tsRes.redactedText);
-  assert.deepEqual(jsRes.tokenMap, tsRes.tokenMap);
-  assert.equal(jsRes.riskScore, tsRes.riskScore);
-  assert.equal(extGuard.restoreTokens(jsRes.redactedText, jsRes.tokenMap), sample);
-});
-

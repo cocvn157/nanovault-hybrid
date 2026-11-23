@@ -4,9 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NanoVault Hybrid — Privacy-First Hybrid AI Security &amp; PII Redactor</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%2338bdf8'/%3E%3Cstop offset='100%25' stop-color='%2334d399'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='%23070b14'/%3E%3Cpath d='M32 10L50 18v14c0 12-8 21-18 24C22 53 14 44 14 32V18l18-8z' fill='url(%23g)'/%3E%3Cpath d='M25 32l5 5 10-10' stroke='%2304101d' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E"
+    />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <a class="skip-link" href="#promptInput">Skip to Prompt Input</a>
     <div class="app-shell">
       <header class="topbar">
         <div class="brand">
@@ -14,25 +20,53 @@
           <div>
             <h1>NanoVault <span class="accent">Hybrid</span></h1>
             <p class="subtitle">
-              Local PII Vault + Firebase AI Logic Hybrid Inference (<code>Gemini Nano</code> &harr; <code>Gemini Cloud</code>)
+              Zero-Leak PII Vault + Firebase AI Logic Hybrid Inference (<code>Gemini Nano</code> &harr; <code>Gemini Cloud</code>)
             </p>
           </div>
         </div>
-        <div class="status-cluster">
+        <div class="status-cluster" aria-label="Runtime status badges">
           <span class="badge badge-sdk" id="sdkBadge">firebase@13.4.0 · firebase/ai</span>
-          <span class="badge badge-probe" id="nanoProbeBadge">Probing Chrome Built-in AI...</span>
+          <span class="badge badge-probe" id="nanoProbeBadge" aria-live="polite">Probing Chrome Built-in AI...</span>
           <span class="badge badge-mode" id="activeModeBadge">PREFER_ON_DEVICE</span>
         </div>
       </header>
 
-      <section class="toolbar card">
+      <section class="capability-strip card" aria-label="Chrome Built-in AI and Local Hardware Capability Probe">
+        <div class="cap-items">
+          <div class="cap-pill">
+            <span class="cap-key">Prompt API</span>
+            <strong id="capPromptApi" class="cap-val">Probing...</strong>
+          </div>
+          <div class="cap-pill">
+            <span class="cap-key">WebGPU</span>
+            <strong id="capWebGpu" class="cap-val">Checking...</strong>
+          </div>
+          <div class="cap-pill">
+            <span class="cap-key">WASM Guard</span>
+            <strong id="capWasm" class="cap-val">Checking...</strong>
+          </div>
+          <div class="cap-pill">
+            <span class="cap-key">Network Gate</span>
+            <strong id="capNetwork" class="cap-val">Online · Hybrid Permitted</strong>
+          </div>
+        </div>
+        <div class="cap-actions">
+          <button type="button" id="toggleOfflineBtn" class="btn btn-offline" aria-pressed="false">
+            Airplane Mode (Offline $0): OFF
+          </button>
+          <button type="button" id="reprobeBtn" class="btn btn-ghost btn-sm">Re-probe</button>
+        </div>
+      </section>
+
+      <section class="toolbar card" role="region" aria-label="Presets, InferenceMode, and Privacy Policy Controls">
         <div class="toolbar-group">
-          <span class="label">Incident Presets</span>
-          <div class="preset-buttons">
-            <button type="button" class="btn btn-chip" data-preset="outage">Production Outage Leak</button>
-            <button type="button" class="btn btn-chip" data-preset="fintech">FinTech IBAN &amp; Card</button>
-            <button type="button" class="btn btn-chip" data-preset="ssh">RSA Private Key Leak</button>
-            <button type="button" class="btn btn-chip" data-preset="clean">Clean Safe Prompt</button>
+          <span class="label">Judge Presets</span>
+          <div class="preset-buttons" role="group" aria-label="Curated Incident Presets">
+            <button type="button" class="btn btn-chip active" data-preset="outage" aria-pressed="true">Outage Leak</button>
+            <button type="button" class="btn btn-chip" data-preset="hr_ssn" aria-pressed="false">HR SSN &amp; Token</button>
+            <button type="button" class="btn btn-chip" data-preset="fintech" aria-pressed="false">FinTech IBAN/Card</button>
+            <button type="button" class="btn btn-chip" data-preset="ssh" aria-pressed="false">RSA Private Key</button>
+            <button type="button" class="btn btn-chip" data-preset="clean" aria-pressed="false">Clean Prompt</button>
           </div>
         </div>
 
@@ -46,22 +80,38 @@
           </select>
         </div>
 
-        <div class="toolbar-group toggles">
-          <label class="toggle"><input type="checkbox" id="toggleSecrets" checked /> Secrets</label>
-          <label class="toggle"><input type="checkbox" id="togglePii" checked /> PII</label>
-          <label class="toggle"><input type="checkbox" id="toggleNetwork" checked /> Network IPs</label>
-          <label class="toggle toggle-firewall">
-            <input type="checkbox" id="toggleStrictFirewall" />
-            Block Cloud on Critical Secrets
-          </label>
+        <div class="toolbar-group">
+          <span class="label">Redaction Policy &amp; Format</span>
+          <div class="toggles">
+            <label class="toggle"><input type="checkbox" id="toggleSecrets" checked /> Secrets</label>
+            <label class="toggle"><input type="checkbox" id="togglePii" checked /> PII</label>
+            <label class="toggle"><input type="checkbox" id="toggleSsn" checked /> SSNs</label>
+            <label class="toggle"><input type="checkbox" id="toggleNetwork" checked /> IPs</label>
+            <label class="toggle toggle-firewall">
+              <input type="checkbox" id="toggleStrictFirewall" />
+              Block Cloud on Critical
+            </label>
+            <select id="maskStyleSelect" class="select select-compact" aria-label="Redaction token format">
+              <option value="redacted" selected>&lt;REDACTED_*&gt;</option>
+              <option value="vault">{{NV_*}}</option>
+            </select>
+          </div>
         </div>
 
         <div class="toolbar-group">
-          <button type="button" id="toggleConfigBtn" class="btn btn-ghost">Firebase Live Config</button>
+          <button
+            type="button"
+            id="toggleConfigBtn"
+            class="btn btn-ghost"
+            aria-expanded="false"
+            aria-controls="firebaseConfigDrawer"
+          >
+            Firebase Live Config
+          </button>
         </div>
       </section>
 
-      <section id="firebaseConfigDrawer" class="card config-drawer hidden">
+      <section id="firebaseConfigDrawer" class="card config-drawer hidden" aria-label="Optional Firebase Web App Configuration">
         <div class="drawer-head">
           <div>
             <h3>Optional Live Firebase AI Logic Credentials (Session-Only)</h3>
@@ -92,13 +142,13 @@
       </section>
 
       <main class="workspace">
-        <section class="card panel">
+        <section class="card panel" aria-label="Local PII Guard and Ephemeral Vault">
           <div class="panel-head">
             <div>
               <h2>1. Raw Input &amp; Zero-Trust Local PII Guard</h2>
-              <p class="muted">Scanned instantaneously in browser memory before any AI inference.</p>
+              <p class="muted" id="presetDescription">Scanned instantaneously in browser memory before any AI inference.</p>
             </div>
-            <div class="risk-meter" id="riskMeter">
+            <div class="risk-meter" id="riskMeter" aria-live="polite">
               <span class="risk-label">RISK:</span>
               <strong id="riskLevelText">SAFE (0/100)</strong>
             </div>
@@ -106,44 +156,61 @@
 
           <label class="field-label" for="taskSelect">Security Task Instruction</label>
           <select id="taskSelect" class="select full">
-            <option value="Analyze the sanitized prompt below, summarize key security risks or action items concisely, and preserve any {{NV_*}} vault placeholders verbatim.">
+            <option value="Analyze the sanitized prompt below, summarize key security risks or action items concisely, and preserve any &lt;REDACTED_*&gt; or {{NV_*}} vault placeholders verbatim.">
               Incident Security Triage &amp; Remediation
             </option>
-            <option value="Draft a polite, actionable engineering support response using the {{NV_*}} placeholders verbatim without asking for raw credentials.">
+            <option value="Draft a polite, actionable engineering support response using the &lt;REDACTED_*&gt; or {{NV_*}} placeholders verbatim without asking for raw credentials.">
               Draft Safe Support Response
             </option>
-            <option value="List compliance violations and secret-rotation steps referencing each {{NV_*}} token verbatim.">
+            <option value="List compliance violations and secret-rotation steps referencing each &lt;REDACTED_*&gt; or {{NV_*}} token verbatim.">
               Compliance &amp; Secret Rotation Checklist
             </option>
           </select>
 
-          <label class="field-label" for="promptInput">Raw Prompt / Log / Ticket</label>
-          <textarea id="promptInput" rows="10" spellcheck="false" placeholder="Paste logs, support tickets, API keys, JWTs, IBANs, or private keys..."></textarea>
+          <div class="field-row">
+            <label class="field-label" for="promptInput">Raw Prompt / Log / Ticket</label>
+            <span class="muted small">Shortcut: <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to execute</span>
+          </div>
+          <textarea
+            id="promptInput"
+            rows="6"
+            spellcheck="false"
+            placeholder="Paste logs, support tickets, SSNs, API keys, JWTs, IBANs, or private keys..."
+          ></textarea>
 
           <div class="action-row">
             <button type="button" id="runBtn" class="btn btn-primary">Run Hybrid Inference</button>
-            <button type="button" id="copySafeBtn" class="btn btn-secondary">Copy Sanitized Prompt</button>
-            <span class="muted small" id="scanStats">0 entities · 0.00 ms local scan</span>
+            <button type="button" id="copySafeBtn" class="btn btn-secondary">Copy Sanitized Packet</button>
+            <span class="muted small" id="scanStats" aria-live="polite">0 entities · 0.00 ms local scan</span>
           </div>
 
           <div class="vault-section">
             <div class="vault-head">
-              <h3>Ephemeral Local Vault Tokens</h3>
-              <span class="muted small">Never transmitted off-device</span>
+              <div>
+                <h3>Ephemeral Local Vault (<span id="vaultCountLabel">0</span>)</h3>
+                <span class="muted small">Stays strictly in browser memory · Offline searchable</span>
+              </div>
+              <input
+                id="vaultSearchInput"
+                class="vault-search"
+                type="search"
+                placeholder="Search vault (e.g. SSN, API_KEY, CRITICAL)..."
+                aria-label="Search local ephemeral vault tokens"
+              />
             </div>
-            <div id="entityList" class="entity-list">
+            <div id="entityList" class="entity-list" aria-live="polite">
               <p class="muted small">No sensitive tokens detected.</p>
             </div>
           </div>
         </section>
 
-        <section class="card panel">
+        <section class="card panel" aria-label="Hybrid Router, Zero-Leak Diff Gate, and Economics">
           <div class="panel-head">
             <div>
-              <h2>2. Hybrid Router &amp; Output Restoration</h2>
-              <p class="muted">Inspect exact routing telemetry, sanitized wire payload, and local re-hydration.</p>
+              <h2>2. Hybrid Router, Diff Gate &amp; Economics</h2>
+              <p class="muted">Inspect live Before/After diff, Zero-Leak verification, and latency/cost telemetry.</p>
             </div>
-            <span class="badge" id="resultStatusBadge">READY</span>
+            <span class="badge" id="resultStatusBadge" aria-live="polite">READY</span>
           </div>
 
           <div class="telemetry-grid">
@@ -152,7 +219,7 @@
               <strong class="metric-value" id="metricSource">&mdash;</strong>
             </div>
             <div class="metric">
-              <span class="metric-label">Latency</span>
+              <span class="metric-label">Measured Latency</span>
               <strong class="metric-value" id="metricLatency">&mdash;</strong>
             </div>
             <div class="metric">
@@ -160,23 +227,152 @@
               <strong class="metric-value" id="metricBytes">0 B</strong>
             </div>
             <div class="metric">
-              <span class="metric-label">Policy Decision</span>
-              <strong class="metric-value small-val" id="metricDecision">AWAITING RUN</strong>
+              <span class="metric-label">Token Cost / Policy</span>
+              <strong class="metric-value small-val" id="metricCost">$0.0000 · AWAITING</strong>
             </div>
           </div>
 
-          <div class="tabs" role="tablist">
-            <button type="button" class="tab active" data-tab="restored">Local Restored Output</button>
-            <button type="button" class="tab" data-tab="wire">Wire Payload (What Leaves Device)</button>
-            <button type="button" class="tab" data-tab="raw">Raw Model Output ({{NV_*}})</button>
-            <button type="button" class="tab" data-tab="audit">Audit Log (<span id="auditCount">0</span>)</button>
+          <div id="zeroLeakBanner" class="zero-leak-banner gate-pass" aria-live="polite">
+            ZERO-LEAK GATE ARMED · 0 raw secret bytes permitted in cloud egress
+          </div>
+
+          <div class="econ-strip" id="economicsVisual" aria-label="On-device vs Cloud cost and latency comparison">
+            <div class="econ-row">
+              <span class="econ-label">Latency</span>
+              <div class="econ-bars">
+                <div class="bar-track" title="Local / On-Device Latency">
+                  <div id="barLocalLatency" class="bar-fill bar-local" style="width: 12%"></div>
+                </div>
+                <span id="lblLocalLatency" class="econ-num">Local: &lt;1 ms</span>
+              </div>
+              <div class="econ-bars">
+                <div class="bar-track" title="Estimated Cloud Escalation Latency">
+                  <div id="barCloudLatency" class="bar-fill bar-cloud" style="width: 82%"></div>
+                </div>
+                <span id="lblCloudLatency" class="econ-num">Cloud est: ~490 ms</span>
+              </div>
+            </div>
+            <div class="econ-row">
+              <span class="econ-label">Cost / 1k</span>
+              <div class="econ-bars">
+                <span id="lblLocalCost" class="econ-pill pill-emerald">On-Device / Offline: $0.00</span>
+                <span id="lblCloudCost" class="econ-pill pill-violet">Cloud Flash est: $0.00 / 1k</span>
+                <span id="lblSessionSaved" class="econ-pill pill-cyan">Session Spent: $0.0000</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="tabs" role="tablist" aria-label="Inspection views">
+            <button
+              type="button"
+              id="tabBtnDiff"
+              class="tab active"
+              role="tab"
+              aria-selected="true"
+              aria-controls="panelDiff"
+              data-tab="diff"
+              tabindex="0"
+            >
+              Diff Gate
+            </button>
+            <button
+              type="button"
+              id="tabBtnRestored"
+              class="tab"
+              role="tab"
+              aria-selected="false"
+              aria-controls="panelRestored"
+              data-tab="restored"
+              tabindex="-1"
+            >
+              Restored Output
+            </button>
+            <button
+              type="button"
+              id="tabBtnEconomics"
+              class="tab"
+              role="tab"
+              aria-selected="false"
+              aria-controls="panelEconomics"
+              data-tab="economics"
+              tabindex="-1"
+            >
+              Benchmark
+            </button>
+            <button
+              type="button"
+              id="tabBtnWire"
+              class="tab"
+              role="tab"
+              aria-selected="false"
+              aria-controls="panelWire"
+              data-tab="wire"
+              tabindex="-1"
+            >
+              Wire Packet
+            </button>
+            <button
+              type="button"
+              id="tabBtnRaw"
+              class="tab"
+              role="tab"
+              aria-selected="false"
+              aria-controls="panelRaw"
+              data-tab="raw"
+              tabindex="-1"
+            >
+              Raw Output
+            </button>
+            <button
+              type="button"
+              id="tabBtnAudit"
+              class="tab"
+              role="tab"
+              aria-selected="false"
+              aria-controls="panelAudit"
+              data-tab="audit"
+              tabindex="-1"
+            >
+              Audit (<span id="auditCount">0</span>)
+            </button>
           </div>
 
           <div class="tab-panels">
-            <pre id="panelRestored" class="output-box">Click "Run Hybrid Inference" to execute the local PII Guard + Firebase Hybrid AI pipeline.</pre>
-            <pre id="panelWire" class="output-box hidden"></pre>
-            <pre id="panelRaw" class="output-box hidden"></pre>
-            <div id="panelAudit" class="audit-wrap hidden">
+            <div id="panelDiff" class="diff-split" role="tabpanel" aria-labelledby="tabBtnDiff">
+              <div class="diff-pane">
+                <div class="diff-pane-head head-raw">BEFORE · Raw Browser Input (Never Sent Off-Device)</div>
+                <div id="diffBeforeBox" class="diff-body"></div>
+              </div>
+              <div class="diff-pane">
+                <div class="diff-pane-head head-safe">AFTER · Sanitized Wire Packet (Zero Raw Secrets)</div>
+                <div id="diffAfterBox" class="diff-body"></div>
+              </div>
+            </div>
+
+            <pre
+              id="panelRestored"
+              class="output-box hidden"
+              role="tabpanel"
+              aria-labelledby="tabBtnRestored"
+            >Click "Run Hybrid Inference" (or press Ctrl+Enter) to execute the local PII Guard + Firebase Hybrid AI pipeline.</pre>
+
+            <div id="panelEconomics" class="econ-panel hidden" role="tabpanel" aria-labelledby="tabBtnEconomics"></div>
+
+            <pre
+              id="panelWire"
+              class="output-box hidden"
+              role="tabpanel"
+              aria-labelledby="tabBtnWire"
+            ></pre>
+
+            <pre
+              id="panelRaw"
+              class="output-box hidden"
+              role="tabpanel"
+              aria-labelledby="tabBtnRaw"
+            ></pre>
+
+            <div id="panelAudit" class="audit-wrap hidden" role="tabpanel" aria-labelledby="tabBtnAudit">
               <table class="audit-table">
                 <thead>
                   <tr>
@@ -184,13 +380,14 @@
                     <th>Mode</th>
                     <th>Source</th>
                     <th>Latency</th>
-                    <th>Redacted</th>
+                    <th>Cost</th>
+                    <th>Masked</th>
                     <th>Cloud Bytes</th>
                     <th>Decision</th>
                   </tr>
                 </thead>
                 <tbody id="auditBody">
-                  <tr><td colspan="7" class="muted">No executions yet.</td></tr>
+                  <tr><td colspan="8" class="muted">No executions yet.</td></tr>
                 </tbody>
               </table>
             </div>
@@ -202,7 +399,7 @@
         <div>
           <strong>Chrome Extension MV3 Companion:</strong> Load <code>extension/</code> unpacked in <code>chrome://extensions</code> for Side Panel tab redaction &amp; local Gemini Nano checks.
         </div>
-        <div class="muted">Built for Google #BuildHybridAI 2026 · Zero-capital, privacy-first architecture</div>
+        <div class="muted">Built for Google #BuildHybridAI 2026 · Zero-capital, privacy-first hybrid architecture</div>
       </footer>
     </div>
 

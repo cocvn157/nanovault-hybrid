@@ -59,7 +59,7 @@ spAnalyzeBtn.addEventListener('click', async () => {
       initialPrompts: [
         {
           role: 'system',
-          content: 'Summarize security risks concisely and keep {{NV_*}} tokens verbatim.',
+          content: 'Summarize security risks concisely and keep <REDACTED_*> or {{NV_*}} tokens verbatim.',
         },
       ],
     });

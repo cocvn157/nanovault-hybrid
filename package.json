@@ -9,13 +9,15 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/hybrid-engine.test.ts"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "firebase": "^13.4.0"
   },
   "devDependencies": {
     "typescript": "^5.8.3",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "vitest": "^3.2.4"
   }
 }

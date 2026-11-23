@@ -1,4 +1,4 @@
-import type { PrivacyPolicy } from '../src/pii-guard.ts';
+import type { MaskStyle, PrivacyPolicy } from '../src/pii-guard.ts';
 
 export function scanAndRedact(
   input: string,
@@ -10,6 +10,7 @@ export function scanAndRedact(
   tokenMap: Record<string, string>;
   riskScore: number;
   containsCriticalSecrets: boolean;
+  maskStyle: MaskStyle;
 };
 
 export function restoreTokens(text: string, tokenMap: Record<string, string>): string;

@@ -1,10 +1,12 @@
 // Shared Zero-Trust Local PII & Secret Guard for Chrome Extension MV3 Side Panel
-// Mirrors src/pii-guard.ts regex rules, Luhn/IBAN validators, and reversible token map.
+// Mirrors src/pii-guard.ts regex rules, SSN/Luhn/IBAN validators, and reversible token map.
 
 export const DEFAULT_PRIVACY_POLICY = {
   redactSecrets: true,
   redactPii: true,
   redactNetwork: true,
+  redactSsn: true,
+  maskStyle: 'redacted',
 };
 
 function luhnCheck(raw) {
@@ -40,6 +42,15 @@ function isValidIbanFormat(raw) {
   return remainder === 1;
 }
 
+function isValidSsnFormat(raw) {
+  const parts = raw.split('-');
+  if (parts.length !== 3) return false;
+  const [area, group, serial] = parts;
+  if (area === '000' || area === '666' || area.startsWith('9')) return false;
+  if (group === '00' || serial === '0000') return false;
+  return true;
+}
+
 const PATTERN_RULES = [
   {
     category: 'PRIVATE_KEY',
@@ -60,10 +71,21 @@ const PATTERN_RULES = [
     regex: /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g,
   },
   {
+    category: 'BEARER_TOKEN',
+    severity: 'CRITICAL',
+    group: 'secrets',
+    regex: /\bBearer\s+[A-Za-z0-9._~+/-]{20,}=*/gi,
+    validate: (match) => {
+      const tokenPart = match.replace(/^Bearer\s+/i, '').trim();
+      return !/^eyJ[A-Za-z0-9_-]{8,}\.eyJ/.test(tokenPart);
+    },
+  },
+  {
     category: 'API_KEY',
     severity: 'CRITICAL',
     group: 'secrets',
-    regex: /\b(?:sk(?:-(?:proj-|live-|test-)?|_(?:live|test)_)[A-Za-z0-9_-]{20,}|rk_(?:live|test)_[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{32,45}|xox[baprs]-[0-9A-Za-z-]{16,})\b/g,
+    regex:
+      /\b(?:sk(?:-(?:proj-|ant-|live-|test-)?|_(?:live|test)_)[A-Za-z0-9_-]{20,}|rk_(?:live|test)_[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{32,45}|xox[baprs]-[0-9A-Za-z-]{16,}|hf_[A-Za-z0-9]{20,})\b/g,
   },
   {
     category: 'CREDIT_CARD',
@@ -83,6 +105,13 @@ const PATTERN_RULES = [
     group: 'pii',
     regex: /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,4})?\b/g,
     validate: isValidIbanFormat,
+  },
+  {
+    category: 'SSN',
+    severity: 'HIGH',
+    group: 'pii',
+    regex: /(?<![\d-])\b\d{3}-\d{2}-\d{4}\b(?![\d-])/g,
+    validate: isValidSsnFormat,
   },
   {
     category: 'EMAIL',
@@ -111,15 +140,24 @@ const PATTERN_RULES = [
 
 const SEVERITY_WEIGHT = { CRITICAL: 40, HIGH: 25, MEDIUM: 12, LOW: 5 };
 
+function formatToken(category, counter, maskStyle) {
+  return maskStyle === 'vault'
+    ? `{{NV_${category}_${counter}}}`
+    : `<REDACTED_${category}_${counter}>`;
+}
+
 export function scanAndRedact(input, policy = DEFAULT_PRIVACY_POLICY) {
+  const maskStyle = policy.maskStyle || 'redacted';
   const candidates = [];
   for (const rule of PATTERN_RULES) {
     const enabled =
-      rule.group === 'secrets'
-        ? policy.redactSecrets
-        : rule.group === 'pii'
-          ? policy.redactPii
-          : policy.redactNetwork;
+      rule.category === 'SSN'
+        ? (policy.redactSsn ?? policy.redactPii)
+        : rule.group === 'secrets'
+          ? policy.redactSecrets
+          : rule.group === 'pii'
+            ? policy.redactPii
+            : policy.redactNetwork;
     if (!enabled) continue;
 
     const regex = new RegExp(rule.regex.source, rule.regex.flags);
@@ -162,7 +200,7 @@ export function scanAndRedact(input, policy = DEFAULT_PRIVACY_POLICY) {
     let token = valueToToken.get(item.original);
     if (!token) {
       counter += 1;
-      token = `{{NV_${item.category}_${counter}}}`;
+      token = formatToken(item.category, counter, maskStyle);
       valueToToken.set(item.original, token);
       tokenMap[token] = item.original;
     }
@@ -186,6 +224,7 @@ export function scanAndRedact(input, policy = DEFAULT_PRIVACY_POLICY) {
     tokenMap,
     riskScore: Math.min(100, score),
     containsCriticalSecrets: hasCritical,
+    maskStyle,
   };
 }
 
